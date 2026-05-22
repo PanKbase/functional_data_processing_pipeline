@@ -105,9 +105,11 @@ def visualize_grouped_trace_csv(
     group_csv_path: str | Path,
     output_path: str | Path | None = None,
     dpi: int = 300,
+    y_upper: float | None = None,
+    y_scale: float = 1.2,
 ) -> Path:
     """
-    Plot one mean +/- SEM trace for each user-defined group.
+    Plot one mean trace with 95% CI for each user-defined group.
     """
     csv_path = Path(csv_path)
     group_csv_path = Path(group_csv_path)
@@ -143,6 +145,7 @@ def visualize_grouped_trace_csv(
     y_max = np.nanmax(trace_df.to_numpy(dtype=float))
     if not np.isfinite(y_max) or y_max <= 0:
         y_max = 1.0
+    y_upper_candidate = y_max
 
     fig, ax = plt.subplots(figsize=(11.5, 6))
 
@@ -161,15 +164,21 @@ def visualize_grouped_trace_csv(
         group_df = trace_df[donors]
         mean = group_df.mean(axis=1, skipna=True)
         sem = group_df.sem(axis=1, skipna=True)
+        ci_half_width = 1.96 * sem.fillna(0.0)
+        ci_lower = mean - ci_half_width
+        ci_upper_series = mean + ci_half_width
         color = palette[idx]
         display_label = f"group {idx + 1}"
+        upper_for_group = float(np.nanmax(ci_upper_series.to_numpy(dtype=float)))
+        if np.isfinite(upper_for_group):
+            y_upper_candidate = max(y_upper_candidate, upper_for_group)
 
         ax.fill_between(
             time_x.to_numpy(),
-            (mean - sem).to_numpy(),
-            (mean + sem).to_numpy(),
+            ci_lower.to_numpy(),
+            ci_upper_series.to_numpy(),
             color=color,
-            alpha=0.20,
+            alpha=0.35,
             linewidth=0,
             zorder=2,
         )
@@ -186,7 +195,15 @@ def visualize_grouped_trace_csv(
         )
 
     ax.set_xlim(0, 150)
-    ax.set_ylim(0, y_max * 1.25)
+    if y_upper is not None:
+        if y_upper <= 0:
+            raise ValueError("y_upper must be positive when provided.")
+        y_axis_top = y_upper
+    else:
+        if y_scale <= 0:
+            raise ValueError("y_scale must be positive.")
+        y_axis_top = y_upper_candidate * y_scale
+    ax.set_ylim(0, y_axis_top)
     ax.set_xticks([0, 30, 60, 90, 120, 150])
     ax.set_xlabel("Time (min)", fontsize=16)
     ax.set_ylabel(y_label, fontsize=20)
@@ -218,7 +235,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Visualize grouped perifusion traces (mean +/- SEM per group)."
+        description="Visualize grouped perifusion traces (mean with 95% CI per group)."
     )
     parser.add_argument("csv", help="Input trace CSV.")
     parser.add_argument("groups", help="Group assignment CSV.")
@@ -228,6 +245,18 @@ if __name__ == "__main__":
         help="Output PNG path (optional). Defaults to <input_stem>_grouped_trace.png",
     )
     parser.add_argument("--dpi", type=int, default=300, help="Figure DPI.")
+    parser.add_argument(
+        "--y-upper",
+        type=float,
+        default=None,
+        help="Optional fixed y-axis upper limit. If omitted, uses auto-scaling.",
+    )
+    parser.add_argument(
+        "--y-scale",
+        type=float,
+        default=1.2,
+        help="Auto y-axis multiplier applied to max raw/CI upper value (default: 1.2).",
+    )
     args = parser.parse_args()
 
     output = visualize_grouped_trace_csv(
@@ -235,5 +264,7 @@ if __name__ == "__main__":
         group_csv_path=args.groups,
         output_path=args.out,
         dpi=args.dpi,
+        y_upper=args.y_upper,
+        y_scale=args.y_scale,
     )
     print(output)

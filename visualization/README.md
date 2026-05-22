@@ -2,8 +2,8 @@
 
 This folder contains two plotting scripts:
 
-- `plot_traces.py`: one cohort mean trace (with SEM)
-- `plot_grouped_traces.py`: one mean trace (with SEM) per user-defined group
+- `plot_traces.py`: one cohort mean trace (with 95% CI)
+- `plot_grouped_traces.py`: one mean trace (with 95% CI) per user-defined group
 
 Both scripts keep the fixed stimulation layout, vertical dotted boundaries, top annotations, and top horizontal boundary line.
 
@@ -12,11 +12,12 @@ Both scripts keep the fixed stimulation layout, vertical dotted boundaries, top 
 ### Default figure style (matches `example2.png`)
 
 - mean line with dot markers
-- shaded `mean +/- SEM`
+- shaded `mean +/- 95% CI` (`mean +/- 1.96 * SEM`)
 - no individual donor traces by default
 - yellow shading marks **stimulus phases** (not `G 5.6`)
 - black top bars mark stimulus phases
 - `G 5.6` labels stay inside the plot area
+- y-axis auto range uses `--y-scale` times max(data, CI upper); default `1.2x`
 
 ### Y-axis label inference from filename
 
@@ -46,6 +47,8 @@ Optional:
 
 - `--show-individual-traces`: overlay all donor traces
 - `--dpi <int>`: figure DPI (default `300`)
+- `--y-upper <float>`: fixed y-axis upper limit (overrides auto-scale)
+- `--y-scale <float>`: auto y-axis multiplier (default `1.2`)
 
 Output name pattern:
 
@@ -53,7 +56,7 @@ Output name pattern:
 
 ## 2) Grouped Plot (`plot_grouped_traces.py`)
 
-This script compares groups (for example, Healthy vs Diabetes) as separate mean+SEM lines.
+This script compares groups (for example, Healthy vs Diabetes) as separate mean+95% CI lines.
 Legend labels are shown as `group 1`, `group 2`, ... (with sample size), based on sorted group names.
 
 ### Group assignment input
@@ -81,12 +84,18 @@ RRID:SAMN08769090,Diabetes
 python visualization/plot_grouped_traces.py \
   visualization/HIPP_ins_ieq.csv \
   visualization/example_group_assignments.csv \
-  --out visualization/HIPP_ins_ieq_grouped_example.png
+  --out visualization/HIPP_ins_ieq_grouped_example.png \
+  --y-scale 1.2
 ```
 
 Output default (if `--out` is not given):
 
 - `<input_stem>_grouped_trace.png`
+
+Optional grouped flags:
+
+- `--y-upper <float>`: fixed y-axis upper limit (overrides auto-scale)
+- `--y-scale <float>`: auto y-axis multiplier (default `1.2`)
 
 ## Python API
 

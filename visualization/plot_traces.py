@@ -157,12 +157,14 @@ def visualize_trace_csv(
     show: bool = False,
     dpi: int = 300,
     show_individual_traces: bool = False,
+    y_upper: float | None = None,
+    y_scale: float = 1.2,
 ) -> Path:
     """
     Create a trace visualization from one perifusion CSV file.
 
     The figure keeps a fixed style:
-    - mean trace with dot markers and SEM shadow
+    - mean trace with dot markers and 95% CI shadow
     - fixed vertical guide lines
     - fixed top stimulus annotations
     - fixed glucose background windows
@@ -181,9 +183,16 @@ def visualize_trace_csv(
 
     y_mean = trace_df.mean(axis=1, skipna=True)
     y_sem = trace_df.sem(axis=1, skipna=True)
+    y_ci_half_width = 1.96 * y_sem.fillna(0.0)
+    y_ci_lower = y_mean - y_ci_half_width
+    y_ci_upper = y_mean + y_ci_half_width
     y_max = np.nanmax(trace_df.to_numpy(dtype=float))
     if not np.isfinite(y_max) or y_max <= 0:
         y_max = 1.0
+    y_upper_candidate = y_max
+    ci_upper_max = float(np.nanmax(y_ci_upper.to_numpy(dtype=float)))
+    if np.isfinite(ci_upper_max):
+        y_upper_candidate = max(y_upper_candidate, ci_upper_max)
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -210,13 +219,13 @@ def visualize_trace_csv(
                 zorder=2,
             )
 
-    # Mean +/- SEM shadow.
+    # Mean +/- 95% CI shadow.
     ax.fill_between(
         time_x.to_numpy(),
-        (y_mean - y_sem).to_numpy(),
-        (y_mean + y_sem).to_numpy(),
+        y_ci_lower.to_numpy(),
+        y_ci_upper.to_numpy(),
         color="#ff9db6",
-        alpha=0.35,
+        alpha=0.45,
         linewidth=0,
         zorder=3,
     )
@@ -232,7 +241,15 @@ def visualize_trace_csv(
     )
 
     ax.set_xlim(0, 150)
-    ax.set_ylim(0, y_max * 1.25)
+    if y_upper is not None:
+        if y_upper <= 0:
+            raise ValueError("y_upper must be positive when provided.")
+        y_axis_top = y_upper
+    else:
+        if y_scale <= 0:
+            raise ValueError("y_scale must be positive.")
+        y_axis_top = y_upper_candidate * y_scale
+    ax.set_ylim(0, y_axis_top)
     ax.set_xticks([0, 30, 60, 90, 120, 150])
     ax.set_xlabel("Time (min)", fontsize=16)
     ax.set_ylabel(y_label, fontsize=20)
@@ -261,6 +278,8 @@ def visualize_many(
     output_dir: str | Path | None = None,
     dpi: int = 300,
     show_individual_traces: bool = False,
+    y_upper: float | None = None,
+    y_scale: float = 1.2,
 ) -> List[Path]:
     """
     Generate trace visualizations for multiple CSV files.
@@ -282,6 +301,8 @@ def visualize_many(
                 show=False,
                 dpi=dpi,
                 show_individual_traces=show_individual_traces,
+                y_upper=y_upper,
+                y_scale=y_scale,
             )
         )
     return generated
@@ -303,7 +324,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--show-individual-traces",
         action="store_true",
-        help="Overlay all donor traces in addition to mean+SEM.",
+        help="Overlay all donor traces in addition to mean+95% CI.",
+    )
+    parser.add_argument(
+        "--y-upper",
+        type=float,
+        default=None,
+        help="Optional fixed y-axis upper limit. If omitted, uses auto-scaling.",
+    )
+    parser.add_argument(
+        "--y-scale",
+        type=float,
+        default=1.2,
+        help="Auto y-axis multiplier applied to max raw/CI upper value (default: 1.2).",
     )
     args = parser.parse_args()
 
@@ -312,6 +345,8 @@ if __name__ == "__main__":
         output_dir=args.outdir,
         dpi=args.dpi,
         show_individual_traces=args.show_individual_traces,
+        y_upper=args.y_upper,
+        y_scale=args.y_scale,
     )
     for path in outputs:
         print(path)
